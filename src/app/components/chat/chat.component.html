@@ -1,0 +1,117 @@
+<div class="chat-container">
+  <!-- Toggle Chat Button -->
+  <button *ngIf="!isOpen" (click)="toggleChat()" class="chat-toggle-btn">
+    Chat
+    <div class="unread-contacts" *ngIf="totalUnreadCount > 0">
+      <span class="unread-dot"></span>
+      {{ getUnreadContactsCount() }}
+    </div>
+  </button>
+
+  <!-- Chat Window -->
+  <div *ngIf="isOpen" class="chat-box">
+    <div class="chat-header">
+      <h3>EpiConnect</h3>
+      <button (click)="toggleChat()" class="close-btn">✖</button>
+    </div>
+
+    <div class="user-group-toggle">
+      <button [class.active]="viewMode === 'users'" (click)="viewMode = 'users'">Users</button>
+      <button [class.active]="viewMode === 'groups'" (click)="viewMode = 'groups'">Groups</button>
+    </div>
+
+    <!-- User List -->
+    <div *ngIf="viewMode === 'users'" class="user-list">
+      <ul>
+        <li *ngFor="let user of users" (click)="selectUser(user.username)">
+          <div class="username-container">
+            <span class="avatar">{{ user.username[0].toUpperCase() }}</span>
+            {{ user.username }}
+          </div>
+          <span *ngIf="user.unreadCount && user.unreadCount > 0" class="unread-count">
+            {{ user.unreadCount }}
+          </span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Group List -->
+    <div *ngIf="viewMode === 'groups'" class="group-list">
+      <ul>
+        <li *ngFor="let n of groups" (click)="selectGroup(n)">
+          <div class="name-container">
+            <span class="avatar">👥</span>
+            {{ n.name }}
+          </div>
+          <span *ngIf="n.unreadCount && n.unreadCount > 0" class="unread-count">
+            {{ n.unreadCount }}
+          </span>
+        </li>
+      </ul>
+      <div class="create-group">
+        <input type="text" [(ngModel)]="newGroupName" placeholder="New group name" />
+        <button (click)="createGroup()">Create Group</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Private Chat Popup -->
+  <div *ngIf="selectedUser && isOpen" class="private-chat-popup">
+    <div class="chat-header">
+      <span>{{ selectedUser }}</span>
+      <button (click)="selectedUser = null" class="close-btn">✖</button>
+    </div>
+    <div class="chat-body" #chatBody>
+      <div *ngFor="let msg of messages">
+        <div [ngClass]="{'message': true, 'me': msg.sender === currentUser, 'other': msg.sender !== currentUser}">
+          <b>{{ msg.sender }}:</b> {{ msg.message }}
+        </div>
+      </div>
+      <div *ngIf="typing" class="typing-indicator">
+        <span class="typing-bubble"></span>
+        <span class="typing-bubble"></span>
+        <span class="typing-bubble"></span>
+        <span class="typing-text">{{ typingUser }} is typing</span>
+      </div>
+    </div>
+    <div class="chat-footer">
+      <input type="text" [(ngModel)]="message" placeholder="Type a message..." 
+             (keydown.enter)="sendMessage()" (input)="onTyping()" />
+      <button (click)="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <!-- Group Chat Popup -->
+  <div *ngIf="selectedGroup?.name && isOpen" class="group-chat-popup">
+    <div class="chat-header">
+      <span>Group: {{ selectedGroup?.name }}</span>
+      <div *ngIf="selectedGroup?.admin === currentUser">
+        <button type="button" (click)="toggleAddGroupUser()" class="addUser-btn">+</button>
+      </div>
+      <button (click)="selectedGroup = null" class="close-btn">✖</button>
+    </div>
+    <div *ngIf="showAddGroupUser" class="add-users">
+      <div *ngFor="let user of filteredUsers">
+        <label>{{user.username}}<button (click)="addUser(selectedGroup, user.username)">+</button></label>
+      </div>
+    </div>
+    <div class="chat-body" #groupChatBody *ngIf="!showAddGroupUser">
+      <div *ngFor="let msg of messages">
+        <div [ngClass]="{'message': true, 'me': msg.sender === currentUser, 'other': msg.sender !== currentUser}">
+          <b>{{ msg.sender }}:</b> {{ msg.message }}
+        </div>
+      </div>
+      <div *ngIf="typing" class="typing-indicator">
+        <span class="typing-bubble"></span>
+        <span class="typing-bubble"></span>
+        <span class="typing-bubble"></span>
+        <span class="typing-text">{{ typingUser }} is typing</span>
+      </div>
+    </div>
+    <div class="chat-footer">
+      <input type="text" [(ngModel)]="message" placeholder="Type a message..." 
+             (keydown.enter)="sendMessage()" (input)="onTypingGroup()" />
+      <button (click)="sendMessage()">Send</button>
+    </div>
+  </div>
+</div>

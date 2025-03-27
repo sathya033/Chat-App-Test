@@ -1,0 +1,14 @@
+<div class="register-container">
+    <h2>Register</h2>
+    <form (submit)="registerUser()">
+      
+      <input type="email" id="email" [(ngModel)]="email" placeholder="Email" name="email" required />
+
+      <input type="password" id="password" [(ngModel)]="password" placeholder="Password" name="Password" required />
+  
+      <input type="text" id="username" [(ngModel)]="username" placeholder="Username" name="username" required />
+  
+      <button type="submit">Register</button>
+    </form>
+    <p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
+</div>
