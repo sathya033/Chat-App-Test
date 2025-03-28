@@ -368,7 +368,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   toggleChat() {
     this.isOpen = !this.isOpen;
     if (this.isOpen) {
-      this.totalUnreadCount = 2;
+      this.totalUnreadCount = 0;
     }
   }
 

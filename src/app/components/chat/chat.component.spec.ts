@@ -73,10 +73,20 @@ describe('ChatComponent', () => {
     component.toggleChat();
 
     expect(component.isOpen).toBeTrue();
-    expect(component.totalUnreadCount).toBe(2);
+    expect(component.totalUnreadCount).toBe(0);
 
     component.toggleChat();
 
+    expect(component.isOpen).toBeFalse();
+  });
+
+  it('toggle chat visibility and reset unread count when opened', () => {
+    component.isOpen = false;
+    component.totalUnreadCount = 5;
+    component.toggleChat();
+    expect(component.isOpen).toBeTrue();
+    expect(component.totalUnreadCount).toBe(0);
+    component.toggleChat();
     expect(component.isOpen).toBeFalse();
   });
 
@@ -200,15 +210,6 @@ describe('ChatComponent', () => {
     });
   });
 
-  it('toggle chat visibility and reset unread count when opened', () => {
-    component.isOpen = false;
-    component.totalUnreadCount = 5;
-    component.toggleChat();
-    expect(component.isOpen).toBeTrue();
-    expect(component.totalUnreadCount).toBe(0);
-    component.toggleChat();
-    expect(component.isOpen).toBeFalse();
-  });
 
   it(' emit typing status for private chat', () => {
     component.selectedUser = 'testUser';
