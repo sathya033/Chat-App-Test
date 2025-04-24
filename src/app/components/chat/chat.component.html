@@ -11,19 +11,45 @@
   <!-- Chat Window -->
   <div *ngIf="isOpen" class="chat-box">
     <div class="chat-header">
-      <h3>EpiConnect</h3>
-      <button (click)="toggleChat()" class="close-btn">✖</button>
+      <div class="user-info">
+        <span class="avatar">{{ currentUser[0].toUpperCase() }}</span>
+        <span class="username">{{ currentUser }}</span>
+      </div>
+      <div class="header-actions">
+        <div class="menu-container" *ngIf="viewMode === 'groups'">
+          <button class="menu-btn" (click)="toggleMenu()">
+            <i class="menu-icon">☰</i>
+          </button>
+          <div class="dropdown-menu" *ngIf="isMenuOpen">
+            <button class="dropdown-item" (click)="openCreateGroupModal()">
+              <i class="group-icon">👥</i>
+              Create New Group
+            </button>
+          </div>
+        </div>
+        <button (click)="toggleChat()" class="close-btn">✖</button>
+      </div>
     </div>
 
     <div class="user-group-toggle">
-      <button [class.active]="viewMode === 'users'" (click)="viewMode = 'users'">Users</button>
-      <button [class.active]="viewMode === 'groups'" (click)="viewMode = 'groups'">Groups</button>
+      <div class="toggle-container">
+        <button [class.active]="viewMode === 'users'" (click)="viewMode = 'users'">Users</button>
+      </div>
+      <div class="toggle-container">
+        <button [class.active]="viewMode === 'groups'" (click)="viewMode = 'groups'">Groups</button>
+      </div>
     </div>
 
     <!-- User List -->
     <div *ngIf="viewMode === 'users'" class="user-list">
+      <div class="search-container">
+        <input type="text" [(ngModel)]="userSearchTerm" 
+               (input)="onUserSearch()" 
+               placeholder="Search users..." 
+               class="search-input" />
+      </div>
       <ul>
-        <li *ngFor="let user of users" (click)="selectUser(user.username)">
+        <li *ngFor="let user of filteredUsers" (click)="selectUser(user.username)">
           <div class="username-container">
             <span class="avatar">{{ user.username[0].toUpperCase() }}</span>
             {{ user.username }}
@@ -37,8 +63,14 @@
 
     <!-- Group List -->
     <div *ngIf="viewMode === 'groups'" class="group-list">
+      <div class="search-container">
+        <input type="text" [(ngModel)]="groupSearchTerm" 
+               (input)="onGroupSearch()" 
+               placeholder="Search groups..." 
+               class="search-input" />
+      </div>
       <ul>
-        <li *ngFor="let n of groups" (click)="selectGroup(n)">
+        <li *ngFor="let n of filteredGroups" (click)="selectGroup(n)">
           <div class="name-container">
             <span class="avatar">👥</span>
             {{ n.name }}
@@ -48,10 +80,6 @@
           </span>
         </li>
       </ul>
-      <div class="create-group">
-        <input type="text" [(ngModel)]="newGroupName" placeholder="New group name" />
-        <button (click)="createGroup()">Create Group</button>
-      </div>
     </div>
   </div>
 
@@ -62,9 +90,15 @@
       <button (click)="selectedUser = null" class="close-btn">✖</button>
     </div>
     <div class="chat-body" #chatBody>
-      <div *ngFor="let msg of messages">
+      <div *ngFor="let msg of messages; let i = index">
+        <!-- Add date separator if this message is from a different day than the previous one -->
+        <div *ngIf="i === 0 || (messages[i-1].timestamp | date:'shortDate') !== (msg.timestamp | date:'shortDate')" 
+             class="date-separator">
+          {{ msg.timestamp | date:'mediumDate' }}
+        </div>
         <div [ngClass]="{'message': true, 'me': msg.sender === currentUser, 'other': msg.sender !== currentUser}">
-          <b>{{ msg.sender }}:</b> {{ msg.message }}
+          <div class="message-content">{{ msg.message }}</div>
+          <span class="message-time">{{ msg.timestamp | date:'shortTime' }}</span>
         </div>
       </div>
       <div *ngIf="typing" class="typing-indicator">
@@ -96,9 +130,18 @@
       </div>
     </div>
     <div class="chat-body" #groupChatBody *ngIf="!showAddGroupUser">
-      <div *ngFor="let msg of messages">
+      <div *ngFor="let msg of messages; let i = index">
+        <!-- Add date separator if this message is from a different day than the previous one -->
+        <div *ngIf="i === 0 || (messages[i-1].timestamp | date:'shortDate') !== (msg.timestamp | date:'shortDate')" 
+             class="date-separator">
+          {{ msg.timestamp | date:'mediumDate' }}
+        </div>
         <div [ngClass]="{'message': true, 'me': msg.sender === currentUser, 'other': msg.sender !== currentUser}">
-          <b>{{ msg.sender }}:</b> {{ msg.message }}
+          <div class="message-header">
+            <b>{{ msg.sender }}</b>
+          </div>
+          <div class="message-content">{{ msg.message }}</div>
+          <span class="message-time">{{ msg.timestamp | date:'shortTime' }}</span>
         </div>
       </div>
       <div *ngIf="typing" class="typing-indicator">
@@ -112,6 +155,28 @@
       <input type="text" [(ngModel)]="message" placeholder="Type a message..." 
              (keydown.enter)="sendMessage()" (input)="onTypingGroup()" />
       <button (click)="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <!-- Create Group Modal -->
+  <div class="modal-overlay" *ngIf="showCreateGroupModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Create New Group</h3>
+        <button (click)="closeCreateGroupModal()" class="close-btn">✖</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="groupName">Group Name</label>
+          <div class="input-container">
+            <input type="text" id="groupName" [(ngModel)]="newGroupName" placeholder="Enter group name" />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="cancel-btn" (click)="closeCreateGroupModal()">Cancel</button>
+          <button class="create-btn" (click)="createGroup()">Create Group</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

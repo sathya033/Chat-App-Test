@@ -28,14 +28,14 @@ describe('LoginComponent', () => {
     httpMock.verify();
   });
 
-  it(' create', () => {
+  it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  it(' login successfully and navigate to /chat', () => {
+  it('should login successfully and navigate to /chat', () => {
     const mockResponse = { user: { username: 'testuser' } };
-    spyOn(localStorage, 'setItem');
-    spyOn(component['router'], 'navigate');
+    jest.spyOn(localStorage, 'setItem');
+    jest.spyOn(component['router'], 'navigate');
 
     component.emailOrUsername = 'testuser';
     component.password = 'password123';
@@ -50,7 +50,7 @@ describe('LoginComponent', () => {
     expect(component['router'].navigate).toHaveBeenCalledWith(['/chat']);
   });
 
-  it(' handle invalid server response', () => {
+  it('should handle invalid server response', () => {
     const mockResponse = {};
 
     component.emailOrUsername = 'testuser';
@@ -64,7 +64,7 @@ describe('LoginComponent', () => {
     expect(component.errorMessage).toBe('Invalid response from server');
   });
 
-  it(' handle login error with default error message', () => {
+  it('should handle login error with default error message', () => {
     const mockError = {};
 
     component.emailOrUsername = 'testuser';
@@ -77,5 +77,4 @@ describe('LoginComponent', () => {
 
     expect(component.errorMessage).toBe('Invalid email or password');
   });
-
 });

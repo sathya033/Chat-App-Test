@@ -1,7 +1,8 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked, HostListener } from '@angular/core';
 import { ChatService } from '../../services/chat.service';
 import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
+import { debounceTime } from 'rxjs/operators';
 
 // Add interface for Message type at the top of the file
 interface ChatMessage {
@@ -19,6 +20,7 @@ interface Group {
   members: string[];
   unreadCount?: number;
   admin?: string;
+  lastMessageTime?: Date;  // Add this property
 }
 
 @Component({
@@ -33,7 +35,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   private subscriptions: Subscription[] = [];
   private shouldScrollToBottom = false;
-  users: { username: string; unreadCount?: number }[] = [];
+  users: { username: string; unreadCount?: number; lastMessageTime?: Date }[] = [];
   groups: Group[] = [];
   messages: ChatMessage[] = [];
   viewMode: 'users' | 'groups' = 'users';
@@ -43,7 +45,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   typing = false;
   typingUser = '';
   showAddGroupUser = false;
-  filteredUsers: any[] = [];
+  filteredUsers: { username: string; unreadCount?: number; lastMessageTime?: Date }[] = [];
   groupMembers: string[] = [];
   onlineUsers: string[] = [];
 
@@ -52,6 +54,20 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   message = '';
   newGroupName = '';
   admin = '';
+  userSearchTerm: string = '';
+  groupSearchTerm: string = '';
+  filteredGroups: Group[] = [];
+  isMenuOpen = false;
+  showCreateGroupModal = false;
+
+  // Add caching variables
+  private userCache: { [key: string]: any } = {};
+  private groupCache: { [key: string]: any } = {};
+  private lastFetchTime: number = 0;
+  private readonly CACHE_DURATION = 30000; // 30 seconds cache
+  private messageSubscription: Subscription | null = null;
+  private typingSubscription: Subscription | null = null;
+  private onlineUsersSubscription: Subscription | null = null;
 
   constructor(private http: HttpClient, private chatService: ChatService) {}
 
@@ -69,14 +85,187 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     // Initialize socket connection
     this.chatService.initializeSocket(this.currentUser);
 
+    // Initial fetch
     this.fetchUsers();
     this.fetchGroups();
     this.setupSubscriptions();
   }
 
+  private shouldFetch(): boolean {
+    const now = Date.now();
+    return now - this.lastFetchTime > this.CACHE_DURATION;
+  }
+
+  private fetchUsers() {
+    if (!this.shouldFetch() && Object.keys(this.userCache).length > 0) {
+      this.users = Object.values(this.userCache);
+      this.filteredUsers = [...this.users];
+      return;
+    }
+
+    this.chatService.getUsers().subscribe(
+      (users) => {
+        // Cache the users
+        this.userCache = users.reduce((acc, user) => {
+          acc[user.username] = user;
+          return acc;
+        }, {} as { [key: string]: any });
+
+        this.users = users.filter(user => user.username.trim() !== this.currentUser.trim())
+          .map(user => ({ ...user, lastMessageTime: undefined }));
+        this.filteredUsers = [...this.users];
+        this.lastFetchTime = Date.now();
+
+        // Get unread counts only for users with messages
+        this.users.forEach(user => {
+          if (user.unreadCount) {
+            this.updateUserUnreadCount(user.username);
+          }
+        });
+      },
+      (error) => console.error('Error fetching users:', error)
+    );
+  }
+
+  private fetchGroups() {
+    if (!this.shouldFetch() && Object.keys(this.groupCache).length > 0) {
+      this.groups = Object.values(this.groupCache);
+      this.filteredGroups = [...this.groups];
+      return;
+    }
+
+    console.log('Fetching groups for user:', this.currentUser);
+    this.chatService.getGroups(this.currentUser).subscribe(
+      (groups) => {
+        // Cache the groups
+        this.groupCache = groups.reduce((acc, group) => {
+          acc[group.name] = group;
+          return acc;
+        }, {} as { [key: string]: any });
+
+        this.groups = groups;
+        this.filteredGroups = [...this.groups];
+        this.lastFetchTime = Date.now();
+
+        // Get unread counts only for groups with messages
+        this.groups.forEach(group => {
+          if (group.unreadCount) {
+            this.updateGroupUnreadCount(group.name);
+          }
+        });
+      },
+      (error) => {
+        console.error('Error fetching groups:', error);
+        this.groups = [];
+        this.filteredGroups = [];
+      }
+    );
+  }
+
+  private updateUserUnreadCount(username: string) {
+    this.chatService.getUnreadMessageCount(this.currentUser).subscribe(
+      (response) => {
+        if (response && typeof response.unreadCount === 'number') {
+          const user = this.users.find(u => u.username === username);
+          if (user) {
+            user.unreadCount = response.unreadCount;
+            this.updateTotalUnreadCount();
+          }
+        }
+      },
+      (error) => console.error('Error fetching unread count:', error)
+    );
+  }
+
+  private updateGroupUnreadCount(groupName: string) {
+    this.chatService.getGroupUnreadCount(groupName, this.currentUser).subscribe(
+      (response) => {
+        if (response && typeof response.unreadCount === 'number') {
+          const group = this.groups.find(g => g.name === groupName);
+          if (group && (!this.selectedGroup || groupName !== this.selectedGroup.name)) {
+            group.unreadCount = response.unreadCount;
+            this.updateTotalUnreadCount();
+          }
+        }
+      },
+      (error) => console.error('Error fetching group unread count:', error)
+    );
+  }
+
+  private setupSubscriptions(): void {
+    // Clean up existing subscriptions
+    this.cleanupSubscriptions();
+
+    // Subscribe to messages with debounce
+    this.messageSubscription = this.chatService.getMessages()
+      .pipe(debounceTime(300))
+      .subscribe(messages => {
+        if (messages && messages.length > 0) {
+          this.processMessages(messages);
+        }
+      });
+
+    // Subscribe to typing status
+    this.typingSubscription = this.chatService.getTypingStatus()
+      .pipe(debounceTime(300))
+      .subscribe(status => {
+        this.typing = status.isTyping;
+        this.typingUser = status.user;
+      });
+
+    // Subscribe to online users
+    this.onlineUsersSubscription = this.chatService.getOnlineUsers()
+      .pipe(debounceTime(1000))
+      .subscribe(users => {
+        this.onlineUsers = users;
+      });
+  }
+
+  private cleanupSubscriptions(): void {
+    if (this.messageSubscription) {
+      this.messageSubscription.unsubscribe();
+    }
+    if (this.typingSubscription) {
+      this.typingSubscription.unsubscribe();
+    }
+    if (this.onlineUsersSubscription) {
+      this.onlineUsersSubscription.unsubscribe();
+    }
+  }
+
+  private processMessages(messages: ChatMessage[]): void {
+    // Update last message time for all messages
+    messages.forEach(msg => {
+      if (msg.sender === this.currentUser && msg.receiver) {
+        this.updateUserLastMessageTime(msg.sender, msg.receiver, new Date(msg.timestamp));
+      } else if (msg.receiver === this.currentUser) {
+        this.updateUserLastMessageTime(msg.sender, msg.receiver, new Date(msg.timestamp));
+      }
+    });
+
+    // Filter messages based on selected user or group
+    const filteredMessages = messages.filter((msg: ChatMessage) => {
+      if (this.selectedUser) {
+        return (msg.sender === this.currentUser && msg.receiver === this.selectedUser) ||
+              (msg.sender === this.selectedUser && msg.receiver === this.currentUser);
+      } else if (this.selectedGroup?.name) {
+        return msg.group === this.selectedGroup.name;
+      }
+      return false;
+    });
+
+    // Remove duplicates and sort messages
+    const uniqueMessages = this.removeDuplicateMessages(filteredMessages);
+    this.messages = this.sortMessagesByTimestamp(uniqueMessages);
+    this.shouldScrollToBottom = true;
+    setTimeout(() => this.scrollToBottom(), 100);
+
+    // Update unread counts
+    this.updateUnreadCounts(messages);
+  }
+
   ngOnDestroy(): void {
-    // Cleanup subscriptions
-    this.subscriptions.forEach(sub => sub.unsubscribe());
+    this.cleanupSubscriptions();
     this.chatService.disconnect();
   }
 
@@ -91,50 +280,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     const userUnreadCount = this.users.reduce((total, user) => total + (user.unreadCount || 0), 0);
     const groupUnreadCount = this.groups.reduce((total, group) => total + (group.unreadCount || 0), 0);
     this.totalUnreadCount = userUnreadCount + groupUnreadCount;
-  }
-
-  private setupSubscriptions(): void {
-    // Subscribe to messages
-    this.subscriptions.push(
-      this.chatService.getMessages().subscribe(messages => {
-        if (messages && messages.length > 0) {
-          // Filter messages based on selected user or group
-          const filteredMessages = messages.filter((msg: ChatMessage) => {
-            if (this.selectedUser) {
-              return (msg.sender === this.currentUser && msg.receiver === this.selectedUser) ||
-                     (msg.sender === this.selectedUser && msg.receiver === this.currentUser);
-            } else if (this.selectedGroup?.name) {
-              return msg.group === this.selectedGroup.name;
-            }
-            return false;
-          });
-
-          // Remove duplicates and sort messages
-          const uniqueMessages = this.removeDuplicateMessages(filteredMessages);
-          this.messages = this.sortMessagesByTimestamp(uniqueMessages);
-          this.shouldScrollToBottom = true;
-          setTimeout(() => this.scrollToBottom(), 100);
-
-          // Update unread counts
-          this.updateUnreadCounts(messages);
-        }
-      })
-    );
-
-    // Subscribe to typing status
-    this.subscriptions.push(
-      this.chatService.getTypingStatus().subscribe(status => {
-        this.typing = status.isTyping;
-        this.typingUser = status.user;
-      })
-    );
-
-    // Subscribe to online users
-    this.subscriptions.push(
-      this.chatService.getOnlineUsers().subscribe(users => {
-        this.onlineUsers = users;
-      })
-    );
   }
 
   private removeDuplicateMessages(messages: ChatMessage[]): ChatMessage[] {
@@ -159,68 +304,51 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     );
   }
 
-  fetchUsers() {
-    this.chatService.getUsers().subscribe(
-      (users) => {
-        this.users = users.filter(user => user.username.trim() !== this.currentUser.trim());
-        // Initialize unread counts to 0
-        this.users.forEach(user => {
-          user.unreadCount = 0;
-          // Get unread count for each user
-          this.chatService.getUnreadMessageCount(this.currentUser).subscribe(
-            (response) => {
-              if (response && typeof response.unreadCount === 'number') {
-                user.unreadCount = response.unreadCount;
-                this.updateTotalUnreadCount();
-              }
-            },
-            (error) => console.error('Error fetching unread count:', error)
-          );
-        });
-      },
-      (error) => console.error('Error fetching users:', error)
+  //search
+  private filterUsers(): void {
+    if (!this.userSearchTerm) {
+      this.filteredUsers = [...this.users];
+      return;
+    }
+    const searchTerm = this.userSearchTerm.toLowerCase();
+    this.filteredUsers = this.users.filter(user =>
+      user.username.toLowerCase().includes(searchTerm)
     );
   }
 
-  fetchGroups() {
-    console.log('Fetching groups for user:', this.currentUser);
-    this.chatService.getGroups(this.currentUser).subscribe(
-      (groups) => {
-        console.log('Received groups:', groups);
-        this.groups = groups;
-
-        // Initialize unread counts to 0 and then get actual count
-        this.groups.forEach(group => {
-          group.unreadCount = 0;
-          this.chatService.getGroupUnreadCount(group.name, this.currentUser).subscribe(
-            (response) => {
-              if (response && typeof response.unreadCount === 'number') {
-                // Only update unread count if not currently viewing this group
-                if (!this.selectedGroup || group.name !== this.selectedGroup.name) {
-                  group.unreadCount = response.unreadCount;
-                  this.updateTotalUnreadCount();
-                }
-              }
-            },
-            (error) => console.error('Error fetching group unread count:', error)
-          );
-        });
-      },
-      (error) => {
-        console.error('Error fetching groups:', error);
-        this.groups = [];
-      }
+  private filterGroups(): void {
+    if (!this.groupSearchTerm) {
+      this.filteredGroups = this.groups;
+      return;
+    }
+    const searchTerm = this.groupSearchTerm.toLowerCase();
+    this.filteredGroups = this.groups.filter(group =>
+      group.name.toLowerCase().includes(searchTerm)
     );
+  }
+
+  onUserSearch(): void {
+    this.filterUsers();
+  }
+
+  onGroupSearch(): void {
+    this.filterGroups();
   }
 
   toggleToUsers() {
     this.viewMode = 'users';
     this.selectedGroup = null;
+    this.selectedUser = null;  // Clear selected user when switching to users view
+    this.messages = [];  // Clear messages
+    this.fetchUsers();  // Refresh user list
   }
 
   toggleToGroups() {
     this.viewMode = 'groups';
     this.selectedUser = null;
+    this.selectedGroup = null;  // Clear selected group when switching to groups view
+    this.messages = [];  // Clear messages
+    this.fetchGroups();  // Refresh group list
   }
 
   selectUser(username: string) {
@@ -241,13 +369,21 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       (error) => console.error('Error marking messages as read:', error)
     );
 
-    // Fetch chat history
+    // Fetch chat history and update last message time
     this.chatService.getChatHistory(this.currentUser, username).subscribe(
       (history) => {
         this.messages = history.filter((msg: ChatMessage) =>
           (msg.sender === this.currentUser && msg.receiver === username) ||
           (msg.sender === username && msg.receiver === this.currentUser)
         );
+        if (this.messages.length > 0) {
+          const lastMessage = this.messages[this.messages.length - 1];
+          this.updateUserLastMessageTime(
+            lastMessage.sender,
+            lastMessage.receiver || '',
+            new Date(lastMessage.timestamp)
+          );
+        }
         this.shouldScrollToBottom = true;
       },
       (error) => console.error('Error fetching private chat history:', error)
@@ -282,6 +418,17 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.messages = this.sortMessagesByTimestamp(
           history.filter((msg: ChatMessage) => msg.group === group.name)
         );
+
+        // Update the group's last message time
+        if (this.messages.length > 0) {
+          const lastMessage = this.messages[this.messages.length - 1];
+          const foundGroup = this.groups.find(g => g.name === group.name);
+          if (foundGroup) {
+            foundGroup.lastMessageTime = new Date(lastMessage.timestamp);
+            this.sortGroupsByLastMessage();
+          }
+        }
+
         this.shouldScrollToBottom = true;
         setTimeout(() => this.scrollToBottom(), 100);
       },
@@ -294,10 +441,19 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   sendMessage() {
     if (!this.message.trim()) return;
 
+    const timestamp = new Date();
     if (this.selectedUser) {
       this.chatService.sendPrivateMessage(this.selectedUser, this.message);
+      // Update last message time immediately for better UX
+      this.updateUserLastMessageTime(this.currentUser, this.selectedUser, timestamp);
     } else if (this.selectedGroup) {
       this.chatService.sendGroupMessage(this.selectedGroup.name, this.message);
+      // Update group's last message time
+      const foundGroup: Group | undefined = this.groups.find(g => g.name === this.selectedGroup.name);
+      if (foundGroup) {
+        foundGroup.lastMessageTime = timestamp;
+        this.sortGroupsByLastMessage();
+      }
     }
 
     this.message = '';
@@ -330,12 +486,12 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.chatService.createGroup(groupData).subscribe(
       (response) => {
         console.log('Group created successfully:', response);
-        this.fetchGroups(); // Refresh the groups list
-        this.newGroupName = '';
+        this.fetchGroups();
+        this.closeCreateGroupModal();
       },
       (error) => {
         console.error('Error creating group:', error);
-
+        this.closeCreateGroupModal();
       }
     );
   }
@@ -435,6 +591,72 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         group.unreadCount = (group.unreadCount || 0) + 1;
         this.updateTotalUnreadCount();
       }
+    }
+  }
+
+  private updateUserLastMessageTime(sender: string, receiver: string, timestamp: Date): void {
+    const targetUser = sender === this.currentUser ? receiver : sender;
+    const user = this.users.find(u => u.username === targetUser);
+    if (user) {
+      user.lastMessageTime = timestamp;
+      // Immediately sort users after updating the timestamp
+      this.sortUsersByLastMessage();
+    }
+  }
+
+  private sortUsersByLastMessage(): void {
+    // Create a new array to trigger change detection
+    this.users = [...this.users].sort((a, b) => {
+      // If both have lastMessageTime, sort by time (newest first)
+      if (a.lastMessageTime && b.lastMessageTime) {
+        return new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime();
+      }
+      // If only one has lastMessageTime, put it first
+      if (a.lastMessageTime) return -1;
+      if (b.lastMessageTime) return 1;
+      // If neither has lastMessageTime, maintain current order
+      return 0;
+    });
+    // Update filtered users to maintain the same order
+    this.filteredUsers = [...this.users];
+  }
+
+  private sortGroupsByLastMessage(): void {
+    this.groups.sort((a, b) => {
+      // If both have lastMessageTime, sort by time (newest first)
+      if (a.lastMessageTime && b.lastMessageTime) {
+        return new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime();
+      }
+      // If only one has lastMessageTime, put it first
+      if (a.lastMessageTime) return -1;
+      if (b.lastMessageTime) return 1;
+      // If neither has lastMessageTime, maintain current order
+      return 0;
+    });
+    // Update filtered groups to maintain the same order
+    this.filteredGroups = [...this.groups];
+  }
+
+  toggleMenu() {
+    this.isMenuOpen = !this.isMenuOpen;
+  }
+
+  openCreateGroupModal() {
+    this.isMenuOpen = false;
+    this.showCreateGroupModal = true;
+  }
+
+  closeCreateGroupModal() {
+    this.showCreateGroupModal = false;
+    this.newGroupName = '';
+  }
+
+  // Close menu when clicking outside
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent) {
+    const menuContainer = document.querySelector('.menu-container');
+    if (menuContainer && !menuContainer.contains(event.target as Node)) {
+      this.isMenuOpen = false;
     }
   }
 }

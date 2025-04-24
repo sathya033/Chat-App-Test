@@ -26,16 +26,16 @@ describe('RegisterComponent', () => {
 
     httpMock = TestBed.inject(HttpTestingController);
     router = TestBed.inject(Router);
-    spyOn(router, 'navigate').and.stub();
+    jest.spyOn(router, 'navigate').mockImplementation(() => Promise.resolve(true));
   });
 
-  it(' create', () => {
+  it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  it(' register user successfully and navigate to /chat', () => {
+  it('should register user successfully and navigate to /chat', () => {
     const mockResponse = { user: { id: 1, email: 'test@example.com', username: 'testuser' } };
-    spyOn(component['http'], 'post').and.returnValue(of(mockResponse));
+    jest.spyOn(component['http'], 'post').mockReturnValue(of(mockResponse));
 
     component.email = 'test@example.com';
     component.password = 'password123';
@@ -51,9 +51,9 @@ describe('RegisterComponent', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/chat']);
   });
 
-  it(' handle registration error and set errorMessage', () => {
+  it('should handle registration error and set errorMessage', () => {
     const mockError = { error: { error: 'Email already exists' } };
-    spyOn(component['http'], 'post').and.returnValue(throwError(mockError));
+    jest.spyOn(component['http'], 'post').mockReturnValue(throwError(() => mockError));
 
     component.email = 'test@example.com';
     component.password = 'password123';
@@ -68,9 +68,9 @@ describe('RegisterComponent', () => {
     expect(component.errorMessage).toEqual('Email already exists');
   });
 
-  it(' set default errorMessage if error response does not contain error field', () => {
+  it('should set default errorMessage if error response does not contain error field', () => {
     const mockError = { error: {} };
-    spyOn(component['http'], 'post').and.returnValue(throwError(mockError));
+    jest.spyOn(component['http'], 'post').mockReturnValue(throwError(() => mockError));
 
     component.email = 'test@example.com';
     component.password = 'password123';
