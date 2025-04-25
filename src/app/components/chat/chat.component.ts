@@ -408,7 +408,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       (error) => console.error('Error marking group messages as read:', error)
     );
 
-    // Join the group socket room
     this.chatService.joinGroup(group.name);
 
     // Fetch group chat history

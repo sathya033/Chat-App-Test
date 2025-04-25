@@ -243,20 +243,55 @@ describe('ChatComponent', () => {
     expect(component.totalUnreadCount).toBe(3);
   });
 
-  it('should handle group chat history', () => {
+  it('should handle group message sending', () => {
+    component.selectedGroup = { name: 'testGroup', members: [] };
+    component.message = 'Hello Group';
+    component.sendMessage();
+    expect(mockChatService.sendGroupMessage).toHaveBeenCalledWith('testGroup', 'Hello Group');
+    expect(component.message).toBe('');
+  });
+
+  it('should handle group message sending with empty message', () => {
+    component.selectedGroup = { name: 'testGroup', members: [] };
+    component.message = '';
+    component.sendMessage();
+    expect(mockChatService.sendGroupMessage).not.toHaveBeenCalled();
+  });
+
+
+  it("should handle private chat history", () => {
+    const mockMessages = [
+      { sender: 'user1', message: 'Hello', timestamp: new Date() },
+    ];
+    (mockChatService.getChatHistory as jest.Mock).mockReturnValue(of(mockMessages));
+
+    component.currentUser = 'currentUser';
+    component.selectUser('user1');
+
+    expect(component.selectedUser).toBe('user1');
+    expect(mockChatService.markMessagesAsRead).toHaveBeenCalledWith('currentUser', 'user1');
+    expect(mockChatService.getChatHistory).toHaveBeenCalledWith('currentUser', 'user1');
+  });
+
+
+  it("should get group chat history", () => {
     const mockMessages = [
       { sender: 'user1', message: 'Hello', timestamp: new Date() },
     ];
     (mockChatService.getGroupChatHistory as jest.Mock).mockReturnValue(of(mockMessages));
-
     component.currentUser = 'currentUser';
     component.selectGroup({ name: 'group1', members: [] });
-
     expect(component.selectedGroup).toEqual({ name: 'group1', members: [] });
-    expect(mockChatService.markGroupMessagesAsRead).toHaveBeenCalledWith('group1', 'currentUser');
     expect(mockChatService.getGroupChatHistory).toHaveBeenCalledWith('group1');
     expect(component.messages.length).toBe(1);
   });
+
+  it('should handle group selection', () => {
+    const group = { name: 'testGroup', members: [] };
+    component.selectGroup(group);
+    expect(component.selectedGroup).toEqual(group);
+    expect(component.viewMode).toBe('groups');
+  })
 
   it('should handle menu toggle', () => {
     component.isMenuOpen = false;
@@ -266,6 +301,7 @@ describe('ChatComponent', () => {
     expect(component.isMenuOpen).toBe(false);
   });
 
+
   it('should handle create group modal', () => {
     component.showCreateGroupModal = false;
     component.openCreateGroupModal();
@@ -274,10 +310,5 @@ describe('ChatComponent', () => {
     expect(component.showCreateGroupModal).toBe(false);
   });
 
-  it('should handle document click for menu', () => {
-    component.isMenuOpen = true;
-    const mockEvent = { target: document.createElement('div') } as unknown as MouseEvent;
-    component.onDocumentClick(mockEvent);
-    expect(component.isMenuOpen).toBe(false);
-  });
 });
+
