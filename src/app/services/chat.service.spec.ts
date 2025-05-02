@@ -1,7 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ChatService } from './chat.service';
-import { of, throwError } from 'rxjs';
 import { io } from 'socket.io-client';
 
 jest.mock('socket.io-client');
