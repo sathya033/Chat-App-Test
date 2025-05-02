@@ -8,7 +8,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "e2e": "ng e2e"
   },
   "private": true,
   "dependencies": {
@@ -37,10 +38,12 @@
     "@angular-devkit/build-angular": "^19.1.7",
     "@angular/cli": "^19.1.7",
     "@angular/compiler-cli": "^19.1.0",
+    "@playwright/test": "1.52.0",
     "karma-cli": "^2.0.0",
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
+    "playwright-ng-schematics": "^2.0.3",
     "typescript": "~5.7.2"
   },
   "jest": {

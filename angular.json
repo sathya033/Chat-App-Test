@@ -80,6 +80,17 @@
         },
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n"
+        },
+        "e2e": {
+          "builder": "playwright-ng-schematics:playwright",
+          "options": {
+            "devServerTarget": "chat-app:serve"
+          },
+          "configurations": {
+            "production": {
+              "devServerTarget": "chat-app:serve:production"
+            }
+          }
         }
       }
     }
