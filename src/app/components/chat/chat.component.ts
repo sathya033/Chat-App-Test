@@ -30,6 +30,9 @@ interface Group {
   styleUrls: ['./chat.component.css'],
 })
 export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
+  // unreadCount(unreadCount: any) {
+  //   throw new Error('Method not implemented.');
+  // }
   @ViewChild('chatBody') chatBody!: ElementRef;
   @ViewChild('groupChatBody') groupChatBody!: ElementRef;
 
@@ -82,6 +85,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       });
     }
 
+    if (!this.currentUser || this.currentUser.trim() === '') {
+      console.error('No current user found. Redirecting to login.');
+      return;
+    }
+
     // Initialize socket connection
     this.chatService.initializeSocket(this.currentUser);
 
@@ -89,6 +97,20 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.fetchUsers();
     this.fetchGroups();
     this.setupSubscriptions();
+
+
+
+    // Fetch messages
+    this.chatService.getMessages().subscribe(messages=>{
+      this.messages = messages.sort((a,b)=>
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+    })
+
+
+  this.chatService.getUnreadMessageCount(this.currentUser).subscribe(count=>{
+    this.totalUnreadCount = count;
+  })
   }
 
   private shouldFetch(): boolean {
@@ -338,17 +360,17 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   toggleToUsers() {
     this.viewMode = 'users';
     this.selectedGroup = null;
-    this.selectedUser = null;  // Clear selected user when switching to users view
-    this.messages = [];  // Clear messages
-    this.fetchUsers();  // Refresh user list
+    this.selectedUser = null;
+    this.messages = [];
+    this.fetchUsers();
   }
 
   toggleToGroups() {
     this.viewMode = 'groups';
     this.selectedUser = null;
-    this.selectedGroup = null;  // Clear selected group when switching to groups view
-    this.messages = [];  // Clear messages
-    this.fetchGroups();  // Refresh group list
+    this.selectedGroup = null;
+    this.messages = [];
+    this.fetchGroups();
   }
 
   selectUser(username: string) {
@@ -540,7 +562,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
-  private scrollToBottom(): void {
+  public scrollToBottom(): void {
     try {
       // Scroll private chat
       if (this.chatBody && this.selectedUser) {

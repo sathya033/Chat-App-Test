@@ -295,6 +295,6 @@ export class ChatService {
     this.messageSubject.next(messages);
   }
 
-  // Removed unnecessary multiply method
+
 }
 

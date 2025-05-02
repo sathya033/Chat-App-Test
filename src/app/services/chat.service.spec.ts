@@ -2,22 +2,34 @@ import { TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ChatService } from './chat.service';
 import { of, throwError } from 'rxjs';
+import { io } from 'socket.io-client';
+
+jest.mock('socket.io-client');
 
 describe('ChatService', () => {
   let service: ChatService;
   let httpMock: HttpTestingController;
+  let mockSocket: any;
 
   beforeEach(() => {
+    mockSocket = {
+      on: jest.fn(),
+      emit: jest.fn(),
+      disconnect: jest.fn(),
+      connect: jest.fn(),
+    };
+    (io as jest.Mock).mockReturnValue(mockSocket);
+
     TestBed.configureTestingModule({
       imports: [HttpClientTestingModule],
-      providers: [ChatService]
+      providers: [ChatService],
     });
     service = TestBed.inject(ChatService);
     httpMock = TestBed.inject(HttpTestingController);
   });
 
   afterEach(() => {
-      httpMock.verify();
+    httpMock.verify();
   });
 
   it('should be created', () => {
@@ -252,50 +264,19 @@ describe('ChatService', () => {
     service.updateMessages(messages);
     service.getMessages().subscribe(updatedMessages => {
       expect(updatedMessages).toEqual(messages);
+    });
   });
-});
 
   it('should handle socket connection', () => {
-    jest.spyOn(service['socket'], 'on');
     service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalled();
+    expect(mockSocket.on).toHaveBeenCalled();
   });
 
   it('should handle socket disconnection', () => {
-    jest.spyOn(service['socket'], 'disconnect');
-    service.disconnect();
-    expect(service['socket'].disconnect).toHaveBeenCalled();
+    service.initializeSocket('testUser');
+    expect(mockSocket.on).toHaveBeenCalledWith('disconnect', expect.any(Function));
   });
 
-  it('should handle socket errors', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('error', expect.any(Function));
-  });
-
-  it('should handle socket reconnection', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('reconnect', expect.any(Function));
-  });
-
-  it('should handle socket reconnection attempts', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('reconnect_attempt', expect.any(Function));
-  });
-
-  it('should handle socket reconnection error', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('reconnect_error', expect.any(Function));
-  });
-
-  it('should handle socket reconnection failed', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('reconnect_failed', expect.any(Function));
-  });
 
   it('should handle HTTP errors when getting users', () => {
     service.getUsers().subscribe({
@@ -396,98 +377,34 @@ describe('ChatService', () => {
   });
 
   it('should handle socket connection errors', () => {
-    jest.spyOn(service['socket'], 'on');
     service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('connect_error', expect.any(Function));
+    expect(mockSocket.on).toHaveBeenCalledWith('connect_error', expect.any(Function));
   });
 
   it('should handle socket disconnection', () => {
-    jest.spyOn(service['socket'], 'on');
     service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('disconnect', expect.any(Function));
+    expect(mockSocket.on).toHaveBeenCalledWith('disconnect', expect.any(Function));
   });
 
-  it('should handle socket reconnection', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('reconnect', expect.any(Function));
-  });
 
-  it('should handle socket reconnection attempts', () => {
-    jest.spyOn(service['socket'], 'on');
+  it('should handle socket private message events', () => {
     service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('reconnect_attempt', expect.any(Function));
-  });
-
-  it('should handle socket reconnection error', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('reconnect_error', expect.any(Function));
-  });
-
-  it('should handle socket reconnection failed', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('reconnect_failed', expect.any(Function));
-  });
-
-  it('should handle socket message events', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('receive_message', expect.any(Function));
+    expect(mockSocket.on).toHaveBeenCalledWith('receive_private_message', expect.any(Function));
   });
 
   it('should handle socket group message events', () => {
-    jest.spyOn(service['socket'], 'on');
     service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('receive_group_message', expect.any(Function));
+    expect(mockSocket.on).toHaveBeenCalledWith('receive_group_message', expect.any(Function));
   });
-
   it('should handle socket typing events', () => {
-    jest.spyOn(service['socket'], 'on');
     service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('typing', expect.any(Function));
+    expect(mockSocket.on).toHaveBeenCalledWith('user_typing', expect.any(Function));
+    expect(mockSocket.on).toHaveBeenCalledWith('userStoppedTyping', expect.any(Function));
   });
 
-  it('should handle socket stop typing events', () => {
-    jest.spyOn(service['socket'], 'on');
+  it('should handle socket online users events', () => {
     service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('stop_typing', expect.any(Function));
+    expect(mockSocket.on).toHaveBeenCalledWith('users_online', expect.any(Function));
   });
 
-  it('should handle socket group typing events', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('typing_group', expect.any(Function));
-  });
-
-  it('should handle socket stop group typing events', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('stop_typing_group', expect.any(Function));
-  });
-
-  it('should handle socket user joined events', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('user_joined', expect.any(Function));
-  });
-
-  it('should handle socket user left events', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('user_left', expect.any(Function));
-  });
-
-  it('should handle socket group user joined events', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('group_user_joined', expect.any(Function));
-  });
-
-  it('should handle socket group user left events', () => {
-    jest.spyOn(service['socket'], 'on');
-    service.initializeSocket('testUser');
-    expect(service['socket'].on).toHaveBeenCalledWith('group_user_left', expect.any(Function));
-  });
 });

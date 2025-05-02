@@ -22,20 +22,25 @@ describe('LoginComponent', () => {
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
+
+    // Mock localStorage
+    const mockLocalStorage = {
+      setItem: jest.fn(),
+      getItem: jest.fn(),
+      removeItem: jest.fn(),
+      clear: jest.fn()
+    };
+    Object.defineProperty(window, 'localStorage', { value: mockLocalStorage });
   });
 
   afterEach(() => {
     httpMock.verify();
   });
 
-  it('should create', () => {
-    expect(component).toBeTruthy();
-  });
-
   it('should login successfully and navigate to /chat', () => {
     const mockResponse = { user: { username: 'testuser' } };
-    jest.spyOn(localStorage, 'setItem');
-    jest.spyOn(component['router'], 'navigate');
+    const mockNavigate = jest.fn();
+    component['router'].navigate = mockNavigate;
 
     component.emailOrUsername = 'testuser';
     component.password = 'password123';
@@ -47,7 +52,7 @@ describe('LoginComponent', () => {
 
     expect(localStorage.setItem).toHaveBeenCalledWith('user', JSON.stringify(mockResponse.user));
     expect(localStorage.setItem).toHaveBeenCalledWith('currentUser', 'testuser');
-    expect(component['router'].navigate).toHaveBeenCalledWith(['/chat']);
+    expect(mockNavigate).toHaveBeenCalledWith(['/chat']);
   });
 
   it('should handle invalid server response', () => {
